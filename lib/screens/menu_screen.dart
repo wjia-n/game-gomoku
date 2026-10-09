@@ -1,396 +1,621 @@
 import 'package:flutter/material.dart';
-
-import '../audio/sound.dart';
 import '../engine/bot.dart';
-import '../engine/gomoku_engine.dart';
-import '../state/game.dart';
-import '../state/settings.dart';
-import '../theme.dart';
-import '../widgets/board.dart';
-import '../widgets/wood.dart';
+import '../engine/gomoku_session.dart';
+import '../services/audio_service.dart';
+import '../services/iap_service.dart';
+import '../services/settings_service.dart';
+import '../theme/scholar.dart';
+import '../theme/scholar_themes.dart';
+import 'game_screen.dart';
+import 'howto_screen.dart';
+import 'pro_screen.dart';
+import 'settings_screen.dart';
 
-/// Scholar's desk main menu: calligraphy title + seal stamp, hero goban,
-/// wooden plaques for modes, difficulty discs, stone color choice.
+/// Scholar's desk main menu: logo + calligraphy title, wooden plaques for
+/// Play vs Bot / Two Players / How to Play / Settings / PRO, difficulty
+/// discs, play-as color choice, and the swap-opening toggle.
 class MenuScreen extends StatefulWidget {
+  final ScholarAudio audio;
   final GomokuSettings settings;
-  final SoundService sound;
-  final GameState game;
-  final bool hasSave;
-  final VoidCallback onPlay;
-  final VoidCallback onResume;
-  final VoidCallback onHowTo;
-  final VoidCallback onOpenSettings;
-
-  const MenuScreen({
-    super.key,
-    required this.settings,
-    required this.sound,
-    required this.game,
-    required this.hasSave,
-    required this.onPlay,
-    required this.onResume,
-    required this.onHowTo,
-    required this.onOpenSettings,
-  });
+  const MenuScreen({super.key, required this.audio, required this.settings});
 
   @override
   State<MenuScreen> createState() => _MenuScreenState();
 }
 
 class _MenuScreenState extends State<MenuScreen> {
+  bool _hasSave = false;
+  late final StoreService _store;
+
+  ScholarThemeDef get _t => ScholarThemes.byId(
+        widget.settings.themeId,
+        custom: widget.settings.customTheme,
+      );
+
   @override
   void initState() {
     super.initState();
-    widget.sound.setMusicMode('menu');
+    _store = StoreService();
+    _store.init(); // fire-and-forget; the PRO screen reads the result
+    _refreshSave();
   }
 
-  void _start(GameMode mode) {
-    widget.sound.playStart();
-    widget.game.newGame(
-      mode: mode,
-      difficulty: widget.settings.difficulty,
-      humanColor: widget.settings.humanColor,
-      swapOpening: widget.settings.swapOpening,
+  Future<void> _refreshSave() async {
+    final j = await widget.settings.loadSavedGame();
+    if (mounted) setState(() => _hasSave = j != null);
+  }
+
+  @override
+  void dispose() {
+    _store.dispose();
+    super.dispose();
+  }
+
+  void _startVsBot() {
+    widget.audio.gameStart();
+    widget.audio.startGameMusic();
+    Navigator.of(context)
+        .push(
+      MaterialPageRoute(
+        builder: (_) => GameScreen(
+          audio: widget.audio,
+          settings: widget.settings,
+          store: _store,
+          mode: GameMode.vsBot,
+        ),
+      ),
+    )
+        .then((_) {
+      widget.audio.startMenuMusic();
+      _refreshSave();
+    });
+  }
+
+  void _startTwoPlayer() {
+    widget.audio.gameStart();
+    widget.audio.startGameMusic();
+    Navigator.of(context)
+        .push(
+      MaterialPageRoute(
+        builder: (_) => GameScreen(
+          audio: widget.audio,
+          settings: widget.settings,
+          store: _store,
+          mode: GameMode.twoPlayer,
+        ),
+      ),
+    )
+        .then((_) {
+      widget.audio.startMenuMusic();
+      _refreshSave();
+    });
+  }
+
+  void _resume() async {
+    final j = await widget.settings.loadSavedGame();
+    if (j == null || !mounted) return;
+    widget.audio.click();
+    widget.audio.startGameMusic();
+    Navigator.of(context)
+        .push(
+      MaterialPageRoute(
+        builder: (_) => GameScreen(
+          audio: widget.audio,
+          settings: widget.settings,
+          store: _store,
+          mode: GameMode.values[j['mode'] as int],
+          savedGame: j,
+        ),
+      ),
+    )
+        .then((_) {
+      widget.audio.startMenuMusic();
+      _refreshSave();
+    });
+  }
+
+  void _openSettings() {
+    widget.audio.click();
+    Navigator.of(context)
+        .push(
+      MaterialPageRoute(
+        builder: (_) => SettingsScreen(
+          audio: widget.audio,
+          settings: widget.settings,
+          store: _store,
+        ),
+      ),
+    )
+        .then((_) => setState(() {}));
+  }
+
+  void _openPro() {
+    widget.audio.click();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => ProScreen(
+          audio: widget.audio,
+          settings: widget.settings,
+          store: _store,
+        ),
+      ),
     );
-    widget.onPlay();
+  }
+
+  void _openHowTo() {
+    widget.audio.click();
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => HowToScreen(
+          audio: widget.audio,
+          settings: widget.settings,
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
-    final st = widget.settings;
-    return Scaffold(
-      backgroundColor: GomokuTheme.ricePaper,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            // faint ink-wash brush strokes in the background
-            Positioned(
-              left: -40,
-              top: 120,
-              child: Opacity(
-                opacity: 0.06,
-                child: CustomPaint(
-                  size: const Size(300, 120),
-                  painter: _WashPainter(),
-                ),
-              ),
-            ),
-            ListView(
-              padding: const EdgeInsets.fromLTRB(20, 8, 20, 28),
-              children: [
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.end,
-                  children: [
-                    _iconBtn(Icons.settings_outlined, () {
-                      widget.sound.playTap();
-                      widget.onOpenSettings();
-                    }),
-                  ],
-                ),
-                // title block
-                Center(
-                  child: Column(
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        crossAxisAlignment: CrossAxisAlignment.center,
-                        children: [
-                          Text('Gomoku',
-                              style: GomokuTheme.display(48,
-                                  weight: FontWeight.w700)),
-                          const SizedBox(width: 10),
-                          const SealStamp(size: 46),
-                        ],
-                      ),
-                      const SizedBox(height: 2),
-                      Text('five stones in a row',
-                          style: GomokuTheme.body(15,
-                              color: GomokuTheme.warmGray)),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 14),
-                // hero: a quiet corner of the goban, a game already in play
-                Center(
-                  child: Container(
-                    constraints:
-                        const BoxConstraints(maxWidth: 300),
-                    child: AspectRatio(
-                      aspectRatio: 1,
-                      child: KayaBoard(
-                        board: _demoBoard(),
-                        lastMove: -1,
-                        invalidAt: -1,
-                        hintAt: -1,
-                        winLine: const [80, 91, 112, 128, 144],
-                        showCoordinates: false,
-                        showLastMoveMarker: false,
-                        interactive: false,
-                        onTap: (_) {},
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 6),
-                Center(
-                  child: Text(
-                      'black to move · the scholar\'s duel',
-                      style: GomokuTheme.label(12)),
-                ),
-                const SizedBox(height: 16),
-                if (widget.hasSave) ...[
-                  ScholarButton(
-                      label: 'Resume last game',
-                      primary: false,
-                      width: double.infinity,
-                      onTap: () {
-                        widget.sound.playTap();
-                        widget.onResume();
-                      }),
-                  const SizedBox(height: 12),
-                ],
-                const SectionHead(title: 'Begin a match'),
-                const SizedBox(height: 8),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ScholarButton(
-                          label: 'Play vs Bot',
-                          onTap: () => _start(GameMode.vsBot)),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ScholarButton(
-                          label: 'Two Players',
-                          primary: false,
-                          onTap: () =>
-                              _start(GameMode.twoPlayer)),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 10),
-                Row(
-                  children: [
-                    Expanded(
-                      child: ScholarButton(
-                          label: 'How to Play',
-                          primary: false,
-                          onTap: () {
-                            widget.sound.playTap();
-                            widget.onHowTo();
-                          }),
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: ScholarButton(
-                          label: 'Settings',
-                          primary: false,
-                          onTap: () {
-                            widget.sound.playTap();
-                            widget.onOpenSettings();
-                          }),
-                    ),
-                  ],
-                ),
-                const SizedBox(height: 18),
-                const SectionHead(title: 'Bot strength'),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                  children: [
-                    _diffDisc(BotDifficulty.beginner, 'Beginner',
-                        Icons.spa_outlined),
-                    _diffDisc(BotDifficulty.skilled, 'Skilled',
-                        Icons.self_improvement),
-                    _diffDisc(BotDifficulty.master, 'Master',
-                        Icons.workspace_premium_outlined),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                const SectionHead(title: 'Your stones (vs bot)'),
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    _stoneChoice(1, 'Black · first'),
-                    const SizedBox(width: 16),
-                    _stoneChoice(2, 'White'),
-                  ],
-                ),
-                const SizedBox(height: 16),
-                const BrushDivider(),
-                const SizedBox(height: 10),
-                // match record
-                AnimatedBuilder(
-                  animation: st,
-                  builder: (_, _) => Row(
+    final t = _t;
+    final s = widget.settings;
+    return PaperBackdrop(
+      theme: t,
+      child: Scaffold(
+        backgroundColor: Colors.transparent,
+        body: SafeArea(
+          child: ListenableBuilder(
+            listenable: s,
+            builder: (_, _) => SingleChildScrollView(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 26, vertical: 18),
+              child: Column(
+                children: [
+                  const SizedBox(height: 8),
+                  Row(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      _stat('Black', '${st.wins}'),
-                      _statSep(),
-                      _stat('White', '${st.losses}'),
-                      _statSep(),
-                      _stat('Draws', '${st.draws}'),
-                      if (st.streak > 0) ...[
-                        _statSep(),
-                        _stat(
-                            'Streak',
-                            '×${st.streak} '
-                            '${st.streakSide == 1 ? 'black' : 'white'}'),
-                      ],
+                      SealStamp(size: 30, theme: t),
+                      const SizedBox(width: 12),
+                      Text('Gomoku', style: Scholar.display(44, theme: t)),
+                      const SizedBox(width: 12),
+                      SealStamp(size: 30, theme: t),
                     ],
                   ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _diffDisc(BotDifficulty d, String label, IconData icon) {
-    final st = widget.settings;
-    return AnimatedBuilder(
-      animation: st,
-      builder: (_, _) => ScholarDisc(
-        icon: icon,
-        label: label,
-        selected: st.difficulty == d,
-        tint: st.difficulty == d ? GomokuTheme.cinnabar : null,
-        onTap: () {
-          widget.sound.playTap();
-          st.update(() => st.difficulty = d);
-        },
-      ),
-    );
-  }
-
-  Widget _stoneChoice(int color, String label) {
-    final st = widget.settings;
-    return AnimatedBuilder(
-      animation: st,
-      builder: (_, _) {
-        final selected = st.humanColor == color;
-        return GestureDetector(
-          onTap: () {
-            widget.sound.playTap();
-            st.update(() => st.humanColor = color);
-          },
-          child: Column(
-            children: [
-              AnimatedContainer(
-                duration: const Duration(milliseconds: 160),
-                padding: const EdgeInsets.all(10),
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: selected
-                      ? GomokuTheme.kayaAmber.withValues(alpha: 0.35)
-                      : Colors.transparent,
-                  border: Border.all(
-                      color: selected
-                          ? GomokuTheme.cinnabar
-                          : GomokuTheme.warmGray
-                              .withValues(alpha: 0.4),
-                      width: selected ? 2.2 : 1.2),
-                ),
-                child: MiniStone(
-                    black: color == 1, size: 40),
+                  const SizedBox(height: 4),
+                  Text(
+                    'FIVE IN A ROW · SCHOLAR\'S EDITION',
+                    style: Scholar.label(12, theme: t),
+                  ),
+                  const SizedBox(height: 18),
+                  // Hero: the game logo in a wooden frame.
+                  Container(
+                    width: 150,
+                    height: 150,
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(color: t.woodMid, width: 5),
+                      boxShadow: [
+                        BoxShadow(
+                          color: Colors.black.withValues(alpha: 0.3),
+                          offset: const Offset(0, 8),
+                          blurRadius: 18,
+                        ),
+                      ],
+                    ),
+                    clipBehavior: Clip.antiAlias,
+                    child: Image.asset('assets/gomoku_logo.png',
+                        fit: BoxFit.cover),
+                  ),
+                  const SizedBox(height: 22),
+                  if (_hasSave) ...[
+                    WoodButton(
+                      label: 'Resume Game',
+                      width: double.infinity,
+                      theme: t,
+                      primary: true,
+                      onTap: () {
+                        widget.audio.click();
+                        _resume();
+                      },
+                    ),
+                    const SizedBox(height: 12),
+                  ],
+                  WoodButton(
+                    label: 'Play vs Bot',
+                    width: double.infinity,
+                    theme: t,
+                    primary: true,
+                    onTap: _startVsBot,
+                  ),
+                  const SizedBox(height: 12),
+                  WoodButton(
+                    label: 'Two Players',
+                    width: double.infinity,
+                    theme: t,
+                    onTap: _startTwoPlayer,
+                  ),
+                  const SizedBox(height: 18),
+                  _DifficultyRow(
+                      theme: t, settings: s, audio: widget.audio),
+                  const SizedBox(height: 14),
+                  if (!s.swapOpening)
+                    _ColorChoice(
+                        theme: t, settings: s, audio: widget.audio),
+                  if (!s.swapOpening) const SizedBox(height: 14),
+                  _SwapToggle(
+                      theme: t, settings: s, audio: widget.audio),
+                  const SizedBox(height: 18),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                    children: [
+                      _MenuChip(
+                          icon: Icons.menu_book,
+                          label: 'How to Play',
+                          theme: t,
+                          onTap: _openHowTo),
+                      _MenuChip(
+                          icon: Icons.settings,
+                          label: 'Settings',
+                          theme: t,
+                          onTap: _openSettings),
+                      _MenuChip(
+                          icon: Icons.workspace_premium,
+                          label: s.isPro ? 'PRO ✓' : 'PRO',
+                          theme: t,
+                          onTap: _openPro),
+                    ],
+                  ),
+                  const SizedBox(height: 18),
+                  _StatsStrip(theme: t, settings: s),
+                  const SizedBox(height: 10),
+                ],
               ),
-              const SizedBox(height: 4),
-              Text(label, style: GomokuTheme.label(11)),
-            ],
+            ),
           ),
-        );
-      },
-    );
-  }
-
-  Widget _stat(String label, String value) => Column(
-        children: [
-          Text(value, style: GomokuTheme.counter(18)),
-          Text(label, style: GomokuTheme.label(11)),
-        ],
-      );
-
-  Widget _statSep() => Container(
-        width: 1,
-        height: 28,
-        margin: const EdgeInsets.symmetric(horizontal: 14),
-        color: GomokuTheme.warmGray.withValues(alpha: 0.4),
-      );
-
-  Widget _iconBtn(IconData icon, VoidCallback onTap) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: GomokuTheme.touch,
-        height: GomokuTheme.touch,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: GomokuTheme.washi,
-          border: Border.all(
-              color: GomokuTheme.warmGray.withValues(alpha: 0.4)),
-          boxShadow: const [
-            BoxShadow(
-                color: GomokuTheme.woodShadow,
-                blurRadius: 6,
-                offset: Offset(0, 3)),
-          ],
         ),
-        child: Icon(icon, color: GomokuTheme.kayaDeep, size: 22),
       ),
     );
-  }
-
-  /// A quiet mid-game position for the menu hero.
-  List<int> _demoBoard() {
-    final b = List<int>.filled(
-        GomokuEngine.n * GomokuEngine.n, 0);
-    int sq(int r, int c) => r * GomokuEngine.n + c;
-    for (final p in [
-      [5, 5],
-      [6, 6],
-      [7, 7],
-      [8, 8],
-      [9, 9]
-    ]) {
-      b[sq(p[0], p[1])] = 1;
-    }
-    for (final p in [
-      [5, 9],
-      [6, 8],
-      [8, 6],
-      [10, 5],
-      [4, 6],
-      [9, 4]
-    ]) {
-      b[sq(p[0], p[1])] = 2;
-    }
-    return b;
   }
 }
 
-class _WashPainter extends CustomPainter {
-  @override
-  void paint(Canvas canvas, Size s) {
-    final p = Paint()
-      ..color = GomokuTheme.ink
-      ..style = PaintingStyle.stroke
-      ..strokeCap = StrokeCap.round;
-    for (var k = 0; k < 5; k++) {
-      final y = 20.0 + k * 20;
-      p.strokeWidth = 10 - k * 1.6;
-      final path = Path()
-        ..moveTo(10, y)
-        ..quadraticBezierTo(
-            s.width * 0.4, y - 14, s.width * 0.8, y + 6)
-        ..quadraticBezierTo(
-            s.width * 0.95, y + 10, s.width - 8, y - 4);
-      canvas.drawPath(path, p);
-    }
-  }
+/// Difficulty discs: Beginner / Skilled / Master (Master is PRO).
+class _DifficultyRow extends StatelessWidget {
+  final ScholarThemeDef theme;
+  final GomokuSettings settings;
+  final ScholarAudio audio;
+  const _DifficultyRow(
+      {required this.theme, required this.settings, required this.audio});
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  Widget build(BuildContext context) {
+    const diffs = [
+      (BotDifficulty.beginner, 'Beginner'),
+      (BotDifficulty.skilled, 'Skilled'),
+      (BotDifficulty.master, 'Master'),
+    ];
+    return Column(
+      children: [
+        Text('BOT STRENGTH', style: Scholar.label(12, theme: theme)),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            for (final (d, label) in diffs)
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 8),
+                child: GestureDetector(
+                  onTap: () {
+                    final locked =
+                        d == BotDifficulty.master && !settings.isPro;
+                    if (locked) {
+                      audio.invalid();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text('Master is a PRO feature',
+                              style: Scholar.body(14, theme: theme)),
+                          backgroundColor: theme.woodDeep,
+                          behavior: SnackBarBehavior.floating,
+                          duration: const Duration(seconds: 2),
+                        ),
+                      );
+                      return;
+                    }
+                    audio.click();
+                    settings.setDifficulty(d);
+                  },
+                  child: Column(
+                    children: [
+                      Container(
+                        width: 62,
+                        height: 62,
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: LinearGradient(
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                            colors: settings.difficulty == d
+                                ? [theme.accent, theme.accentDeep]
+                                : [theme.woodMid, theme.woodDeep],
+                          ),
+                          border: Border.all(
+                            color: settings.difficulty == d
+                                ? theme.accentDeep
+                                : theme.woodLight.withValues(alpha: 0.6),
+                            width: 2,
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color:
+                                  Colors.black.withValues(alpha: 0.3),
+                              offset: const Offset(0, 3),
+                              blurRadius: 6,
+                            ),
+                          ],
+                        ),
+                        alignment: Alignment.center,
+                        child: d == BotDifficulty.master &&
+                                !settings.isPro
+                            ? const Icon(Icons.lock,
+                                color: Color(0xFFFFF6E6), size: 24)
+                            : _MiniStone(
+                                black: d != BotDifficulty.beginner,
+                                count: d.index + 1),
+                      ),
+                      const SizedBox(height: 6),
+                      Text(label,
+                          style: Scholar.label(11, theme: theme)),
+                    ],
+                  ),
+                ),
+              ),
+          ],
+        ),
+      ],
+    );
+  }
+}
+
+class _MiniStone extends StatelessWidget {
+  final bool black;
+  final int count;
+  const _MiniStone({required this.black, required this.count});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (int i = 0; i < count; i++)
+          Container(
+            width: 12,
+            height: 12,
+            margin: const EdgeInsets.symmetric(horizontal: 1.5),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                center: const Alignment(-0.35, -0.35),
+                colors: black
+                    ? [const Color(0xFF5A564E), const Color(0xFF23211E)]
+                    : [Colors.white, const Color(0xFFF2EAD6)],
+              ),
+              border: Border.all(
+                  color: Colors.black.withValues(alpha: 0.4)),
+            ),
+          ),
+      ],
+    );
+  }
+}
+
+/// Play-as Black / White stone choice (hidden when swap opening is on —
+/// the color choice happens after the swap instead).
+class _ColorChoice extends StatelessWidget {
+  final ScholarThemeDef theme;
+  final GomokuSettings settings;
+  final ScholarAudio audio;
+  const _ColorChoice(
+      {required this.theme, required this.settings, required this.audio});
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Text('PLAY AS', style: Scholar.label(12, theme: theme)),
+        const SizedBox(height: 8),
+        Row(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _colorDisc(1, 'Black\n(first)'),
+            const SizedBox(width: 18),
+            _colorDisc(2, 'White\n(second)'),
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _colorDisc(int color, String label) {
+    final selected = settings.humanColor == color;
+    return GestureDetector(
+      onTap: () {
+        audio.click();
+        settings.setHumanColor(color);
+      },
+      child: Column(
+        children: [
+          Container(
+            width: 58,
+            height: 58,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              gradient: RadialGradient(
+                center: const Alignment(-0.35, -0.35),
+                colors: color == 1
+                    ? [const Color(0xFF5A564E), const Color(0xFF23211E)]
+                    : [Colors.white, const Color(0xFFF2EAD6)],
+              ),
+              border: Border.all(
+                color: selected ? theme.accent : Colors.black26,
+                width: selected ? 3.5 : 1.5,
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.3),
+                  offset: const Offset(0, 4),
+                  blurRadius: 8,
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 6),
+          Text(label,
+              style: Scholar.label(11, theme: theme),
+              textAlign: TextAlign.center),
+        ],
+      ),
+    );
+  }
+}
+
+/// Swap-opening toggle (RULES §7).
+class _SwapToggle extends StatelessWidget {
+  final ScholarThemeDef theme;
+  final GomokuSettings settings;
+  final ScholarAudio audio;
+  const _SwapToggle(
+      {required this.theme, required this.settings, required this.audio});
+
+  @override
+  Widget build(BuildContext context) {
+    return PaperCard(
+      theme: theme,
+      padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text('Swap opening',
+                    style: Scholar.label(14, theme: theme)),
+                const SizedBox(height: 2),
+                Text(
+                  'Bot places 3 stones, you choose a color. Fairer first move.',
+                  style: Scholar.body(12,
+                      theme: theme, color: theme.inkSoft),
+                ),
+              ],
+            ),
+          ),
+          GestureDetector(
+            onTap: () {
+              audio.click();
+              settings.setSwapOpening(!settings.swapOpening);
+            },
+            child: Container(
+              width: 58,
+              height: 32,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                color: settings.swapOpening
+                    ? theme.accent
+                    : theme.inkSoft.withValues(alpha: 0.4),
+                border: Border.all(color: theme.woodDeep, width: 1.5),
+              ),
+              alignment: settings.swapOpening
+                  ? Alignment.centerRight
+                  : Alignment.centerLeft,
+              child: Container(
+                width: 26,
+                height: 26,
+                margin: const EdgeInsets.all(2),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const RadialGradient(
+                    center: Alignment(-0.35, -0.35),
+                    colors: [Color(0xFFFFFFFF), Color(0xFFF2EAD6)],
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.35),
+                      offset: const Offset(0, 2),
+                      blurRadius: 3,
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _MenuChip extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final ScholarThemeDef theme;
+  final VoidCallback onTap;
+  const _MenuChip(
+      {required this.icon,
+      required this.label,
+      required this.theme,
+      required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding:
+            const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(10),
+          color: theme.paperCard,
+          border:
+              Border.all(color: theme.woodMid.withValues(alpha: 0.5)),
+          boxShadow: [
+            BoxShadow(
+              color: Colors.black.withValues(alpha: 0.12),
+              offset: const Offset(0, 3),
+              blurRadius: 6,
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: theme.accent, size: 24),
+            const SizedBox(height: 4),
+            Text(label, style: Scholar.label(11, theme: theme)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _StatsStrip extends StatelessWidget {
+  final ScholarThemeDef theme;
+  final GomokuSettings settings;
+  const _StatsStrip({required this.theme, required this.settings});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.center,
+      children: [
+        StatPlaque(
+            label: 'WINS', value: '${settings.wins}', theme: theme),
+        const SizedBox(width: 10),
+        StatPlaque(
+            label: 'DRAWS', value: '${settings.draws}', theme: theme),
+        const SizedBox(width: 10),
+        StatPlaque(
+            label: 'BEST STREAK',
+            value: '${settings.bestStreak}',
+            theme: theme),
+      ],
+    );
+  }
 }
