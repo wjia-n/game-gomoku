@@ -18,7 +18,12 @@ class GomokuSettings extends ChangeNotifier {
   static const _kMusic = '${_p}music_on';
   static const _kSfx = '${_p}sfx_on';
   static const _kVolume = '${_p}volume';
-  static const _kNames = '${_p}player_names'; // StringList, 2 entries
+  static const _kNames = '${_p}player_names'; // legacy unordered StringSet key
+  /// Order-safe player-name storage: a single JSON string. Android's
+  /// SharedPreferences stores StringLists as an unordered StringSet, so the
+  /// old key scrambled name order on every app restart. Never use a
+  /// StringList for ordered data on Android.
+  static const _kNamesJson = '${_p}player_names_json';
   static const _kTheme = '${_p}theme_id';
   static const _kCustomPrefix = '${_p}custom_';
   static const _kStoneStyle = '${_p}stone_style';
@@ -37,6 +42,26 @@ class GomokuSettings extends ChangeNotifier {
   static const _kIsPro = '${_p}is_pro';
 
   static const defaultNames = ['You', 'Bot'];
+
+  /// Encode the 2 player names as one JSON string (order-preserving).
+  static String encodePlayerNames(List<String> names) => jsonEncode(names);
+
+  static String _cleanName(int i, Object? v) {
+    final s = v is String ? v.trim() : '';
+    return s.isEmpty ? defaultNames[i] : s;
+  }
+
+  /// Decode persisted names; falls back to defaults on missing/corrupt data.
+  static List<String> decodePlayerNames(String? raw) {
+    if (raw == null) return List.of(defaultNames);
+    try {
+      final d = jsonDecode(raw);
+      if (d is List && d.length == 2) {
+        return [for (int i = 0; i < 2; i++) _cleanName(i, d[i])];
+      }
+    } catch (_) {}
+    return List.of(defaultNames);
+  }
 
   bool musicOn = true;
   bool sfxOn = true;
@@ -102,12 +127,17 @@ class GomokuSettings extends ChangeNotifier {
     musicOn = p.getBool(_kMusic) ?? true;
     sfxOn = p.getBool(_kSfx) ?? true;
     volume = p.getDouble(_kVolume) ?? 0.8;
-    final names = p.getStringList(_kNames);
-    if (names != null && names.length == 2) {
-      playerNames = [
-        for (int i = 0; i < 2; i++)
-          names[i].trim().isEmpty ? defaultNames[i] : names[i].trim()
-      ];
+    // Player names: prefer the order-safe JSON key. Fall back to the legacy
+    // StringList key once (one-time migration); it may already be scrambled
+    // on Android, which is exactly the bug this replaces.
+    final namesRaw = p.getString(_kNamesJson);
+    if (namesRaw != null) {
+      playerNames = decodePlayerNames(namesRaw);
+    } else {
+      final legacy = p.getStringList(_kNames);
+      playerNames = (legacy != null && legacy.length == 2)
+          ? [for (int i = 0; i < 2; i++) _cleanName(i, legacy[i])]
+          : List.of(defaultNames);
     }
     themeId = p.getString(_kTheme) ?? 'hearth';
     stoneStyle = (p.getInt(_kStoneStyle) ?? 0).clamp(0, StoneStyles.names.length - 1);
@@ -141,7 +171,8 @@ class GomokuSettings extends ChangeNotifier {
     await p.setBool(_kMusic, musicOn);
     await p.setBool(_kSfx, sfxOn);
     await p.setDouble(_kVolume, volume);
-    await p.setStringList(_kNames, playerNames);
+    await p.setString(_kNamesJson, encodePlayerNames(playerNames));
+    await p.remove(_kNames); // drop the legacy unordered key for good
     await p.setString(_kTheme, themeId);
     await p.setInt(_kStoneStyle, stoneStyle);
     await p.setInt(_kMarkerStyle, markerStyle);
