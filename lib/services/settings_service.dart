@@ -82,7 +82,7 @@ class GomokuSettings extends ChangeNotifier {
   int gamesPlayed = 0;
   int bestStreak = 0;
   int _streak = 0;
-  bool isPro = false;
+  bool isPro = true; // everything unlocked — no Pro version
 
   /// Custom theme colors (ARGB ints). Defaults mirror Scholar's Hearth.
   Map<String, int> customColors = Map.of(_defaultCustomColors);
@@ -156,7 +156,7 @@ class GomokuSettings extends ChangeNotifier {
     draws = p.getInt(_kDraws) ?? 0;
     gamesPlayed = p.getInt(_kGames) ?? 0;
     bestStreak = p.getInt(_kStreak) ?? 0;
-    isPro = p.getBool(_kIsPro) ?? false;
+    isPro = true; // everything unlocked
     for (final k in _defaultCustomColors.keys) {
       customColors[k] =
           p.getInt('$_kCustomPrefix$k') ?? _defaultCustomColors[k]!;
