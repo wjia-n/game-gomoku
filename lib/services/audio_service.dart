@@ -19,8 +19,6 @@ import 'package:audioplayers/audioplayers.dart';
 ///   resumes exactly where it left off instead of restarting or dying.
 /// - Every public method catches player errors; audio can never crash the app.
 class ScholarAudio {
-  /// Per-game pitch character (gomoku): 0.94x. Makes SFX unique.
-  static const double _pitchMul = 0.940;
 
   static const int _rate = 22050;
   final AudioPlayer _sfx = AudioPlayer();
