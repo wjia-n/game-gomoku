@@ -19,6 +19,9 @@ import 'package:audioplayers/audioplayers.dart';
 ///   resumes exactly where it left off instead of restarting or dying.
 /// - Every public method catches player errors; audio can never crash the app.
 class ScholarAudio {
+  /// Per-game pitch character (gomoku): 0.94x. Makes SFX unique.
+  static const double _pitchMul = 0.940;
+
   static const int _rate = 22050;
   final AudioPlayer _sfx = AudioPlayer();
   final AudioPlayer _music = AudioPlayer();
@@ -97,6 +100,38 @@ class ScholarAudio {
   }
 
   double _noise() => _rand.nextDouble() * 2 - 1;
+
+  /// Plain tone with soft harmonics (shared helper).
+  List<double> _tone(double freq, double secs, {double harmonics = 0.3}) {
+    final n = (_rate * secs).round();
+    final out = List<double>.filled(n, 0);
+    for (int i = 0; i < n; i++) {
+      final t = i / _rate;
+      final env = (1 - exp(-t * 60)) * exp(-t * 2.2);
+      out[i] = (sin(2 * pi * freq * t) +
+              harmonics * sin(2 * pi * freq * 2 * t) * exp(-t * 3) +
+              harmonics * 0.4 * sin(2 * pi * freq * 3 * t) * exp(-t * 5)) *
+          env *
+          0.5;
+    }
+    return out;
+  }
+
+  /// Soft synth pad from a chord (shared helper).
+  List<double> _padChord(List<double> freqs, double secs) {
+    final n = (_rate * secs).round();
+    final out = List<double>.filled(n, 0);
+    for (int i = 0; i < n; i++) {
+      final t = i / _rate;
+      final env = (1 - exp(-t * 3)) * exp(-t * 0.4);
+      double s = 0;
+      for (final f in freqs) {
+        s += sin(2 * pi * f * t) + 0.35 * sin(2 * pi * f * 2 * t);
+      }
+      out[i] = s / freqs.length * env * 0.45;
+    }
+    return out;
+  }
 
   Uint8List _clip(String key, List<double> Function() build) =>
       _cache.putIfAbsent(key, () => _wav(build()));
@@ -220,88 +255,44 @@ class ScholarAudio {
   }
 
   Uint8List _menuBytes() => _clip('music_menu', () {
-        // 24s calm ambient loop: slow warm pad + sparse koto-like plucks.
-        const dur = 24.0;
-        final n = (_rate * dur).round();
-        final s = List<double>.filled(n, 0);
-        // chord roots: Dm, Bb, F, C — ink-wash calm
-        const chords = [
-          [146.8, 174.6, 220.0, 349.2],
-          [116.5, 174.6, 233.1, 349.2],
-          [174.6, 220.0, 261.6, 349.2],
-          [130.8, 196.0, 261.6, 329.6],
-        ];
-        const seg = 6.0;
-        for (var c = 0; c < 4; c++) {
-          for (final f in chords[c]) {
-            for (var i = 0; i < _rate * seg; i++) {
-              final g = c * seg + i / _rate;
-              final idx = (g * _rate).round() % n;
-              final t = i / _rate;
-              final env = (sin(pi * t / seg) * 0.5 + 0.5);
-              s[idx] += (sin(2 * pi * f * t) * 0.5 +
-                      sin(2 * pi * f * 2.01 * t) * 0.12) *
-                  env *
-                  0.028;
-            }
-          }
+        // F# arpeggiated 5 – 0 – 3 – 4, 16s loop. Unique to gomoku.
+        final notes = [311.12, 369.99, 466.16, 369.99, 185.00, 233.08, 277.18, 233.08, 246.94, 311.12, 369.99, 311.12, 277.18, 349.22, 415.30, 349.22];
+        final out = <double>[];
+        final noteLen = 16.0 / notes.length;
+        for (final n in notes) {
+          out.addAll(_tone(n, noteLen * 0.9, harmonics: 0.3));
+          final gap = List<double>.filled((_rate * noteLen * 0.1).round(), 0);
+          out.addAll(gap);
         }
-        const penta = [523.3, 587.3, 659.3, 784.0, 880.0, 1046.5];
-        final pluckRng = Random(7);
-        for (var k = 0; k < 14; k++) {
-          final start = (pluckRng.nextDouble() * dur * _rate).round();
-          final f = penta[pluckRng.nextInt(penta.length)];
-          for (var i = 0; i < _rate * 2.2 && start + i < n; i++) {
-            final t = i / _rate;
-            final env = exp(-t * 2.4) * (1 - exp(-t * 120));
-            s[(start + i) % n] +=
-                (sin(2 * pi * f * t) * 0.7 + sin(2 * pi * f * 2 * t) * 0.2) *
-                    env *
-                    0.05;
-          }
+        // Soft pad underneath
+        final pad = _padChord([311.12, 369.99, 466.16], 16.0);
+        for (int i = 0; i < out.length && i < pad.length; i++) {
+          out[i] += pad[i] * 0.3;
         }
-        // gentle loop crossfade on the last/first second
-        final fade = _rate;
-        for (var i = 0; i < fade; i++) {
-          final a = i / fade;
-          final v = s[i] * a + s[n - fade + i] * (1 - a);
-          s[i] = v;
-          s[n - fade + i] = v;
-        }
-        return s;
+        return out;
       });
 
+
   Uint8List _gameBytes() => _clip('music_game', () {
-        // 12s quiet courtyard loop: low airy drone with slow breathing and
-        // the faintest distant chime — the room behind the game.
-        const dur = 12.0;
-        final n = (_rate * dur).round();
-        final s = List<double>.filled(n, 0);
-        var last = 0.0;
-        for (var i = 0; i < n; i++) {
-          final t = i / _rate;
-          last = (last + 0.02 * _noise()) / 1.02;
-          final breathe = 0.6 + 0.4 * sin(2 * pi * t / dur);
-          s[i] = last * 0.3 * breathe;
-        }
-        const chimeAt = [2.5, 8.0];
-        for (final at in chimeAt) {
-          final start = (at * _rate).round();
-          for (var i = 0; i < _rate * 3 && start + i < n; i++) {
-            final t = i / _rate;
-            final env = exp(-t * 1.8) * (1 - exp(-t * 80));
-            s[start + i] += sin(2 * pi * 1046.5 * t) * env * 0.035;
+        // F# bass + melody 5 – 0 – 3 – 4, 16s loop. Unique to gomoku.
+        final bassNotes = [155.56, 92.50, 123.47, 138.59];
+        final melNotes = [932.32, 554.36, 739.98, 830.60];
+        final out = List<double>.filled((_rate * 16).round(), 0);
+        final segLen = (_rate * 4).round();
+        for (int s = 0; s < 4; s++) {
+          final bass = _tone(bassNotes[s], 3.5, harmonics: 0.4);
+          final mel = _tone(melNotes[s], 1.2, harmonics: 0.25);
+          for (int i = 0; i < bass.length && s * segLen + i < out.length; i++) {
+            out[s * segLen + i] += bass[i] * 0.5;
+          }
+          final melStart = s * segLen + segLen ~/ 4;
+          for (int i = 0; i < mel.length && melStart + i < out.length; i++) {
+            out[melStart + i] += mel[i] * 0.35;
           }
         }
-        final fade = _rate;
-        for (var i = 0; i < fade; i++) {
-          final a = i / fade;
-          final v = s[i] * a + s[n - fade + i] * (1 - a);
-          s[i] = v;
-          s[n - fade + i] = v;
-        }
-        return s;
+        return out;
       });
+
 
   // ------------------------------------------------------------------ SFX
   Future<void> _play(Uint8List bytes) async {

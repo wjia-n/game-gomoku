@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'scholar_themes.dart';
 
 /// Scholar's Hearth — the Stitch-derived design system for Gomoku.
-/// Ink-wash East Asian scholar's desk: rice paper, washi panels, kaya wood,
+/// Ink-wash scholar's desk: rice paper, washi panels, kaya wood,
 /// ink text, cinnabar seal accents. No neon, no cyberpunk, no generic
 /// Material look.
 ///
