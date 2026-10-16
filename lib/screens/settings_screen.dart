@@ -7,6 +7,7 @@ import '../theme/scholar.dart';
 import '../theme/scholar_themes.dart';
 import 'custom_theme_screen.dart';
 import 'pro_screen.dart';
+import '../transfer/transfer_ui.dart';
 
 /// Scholar's settings: grouped washi panels — Sound, Players, Board &
 /// Stones, Game, and Pro.
@@ -89,6 +90,7 @@ class _SettingsScreenState extends State<SettingsScreen> {
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.stretch,
                 children: [
+              TransferSaveTile(gameSlug: 'gomoku'),
                   _Group(
                       theme: t,
                       title: 'Sound',
