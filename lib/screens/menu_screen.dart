@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../engine/bot.dart';
 import '../engine/gomoku_session.dart';
@@ -260,7 +261,7 @@ class _MenuScreenState extends State<MenuScreen> {
                           onTap: _openSettings),
                       _MenuChip(
                           icon: Icons.workspace_premium,
-                          label: s.isPro ? 'PRO ✓' : 'PRO',
+                          label: defaultTargetPlatform == TargetPlatform.iOS ? '⭐ Gold Star' : (s.isPro ? 'PRO ✓' : 'PRO'),
                           theme: t,
                           onTap: _openPro),
                     ],
