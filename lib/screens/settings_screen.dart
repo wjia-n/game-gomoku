@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import '../engine/bot.dart';
 import '../services/audio_service.dart';
@@ -251,7 +252,9 @@ class _SettingsScreenState extends State<SettingsScreen> {
                       ],
                     ),
                     const SizedBox(height: 4),
-                    Text('＊ Master is a PRO feature',
+                    Text(defaultTargetPlatform == TargetPlatform.iOS
+                        ? '＊ Master bot is free for everyone.'
+                        : '＊ Master is a PRO feature',
                         style: Scholar.body(11,
                             theme: t, color: t.inkSoft),
                         textAlign: TextAlign.center),
@@ -284,15 +287,17 @@ class _SettingsScreenState extends State<SettingsScreen> {
                     ),
                   ]),
                   const SizedBox(height: 14),
-                  _Group(theme: t, title: 'Gomoku PRO', children: [
+                  _Group(theme: t, title: defaultTargetPlatform == TargetPlatform.iOS ? '⭐ Gold Star' : 'Gomoku PRO', children: [
                     ListTile(
                       contentPadding: EdgeInsets.zero,
                       leading: Icon(Icons.workspace_premium,
                           color: t.accent, size: 28),
                       title: Text(
-                          s.isPro
-                              ? 'PRO active — thank you!'
-                              : 'Unlock PRO',
+                          defaultTargetPlatform == TargetPlatform.iOS
+                              ? '⭐ Gold Star'
+                              : s.isPro
+                                  ? 'PRO active — thank you!'
+                                  : 'Unlock PRO',
                           style: Scholar.label(15, theme: t)),
                       subtitle: Text(
                           s.isPro
@@ -572,7 +577,9 @@ class _ThemeGrid extends StatelessWidget {
                 audio.invalid();
                 ScaffoldMessenger.of(context).showSnackBar(
                   SnackBar(
-                    content: Text('Theme creator is a PRO feature',
+                    content: Text(defaultTargetPlatform == TargetPlatform.iOS
+                        ? 'Theme creator is free for everyone.'
+                        : 'Theme creator is a PRO feature',
                         style: Scholar.body(14, theme: t)),
                     backgroundColor: t.woodDeep,
                     behavior: SnackBarBehavior.floating,

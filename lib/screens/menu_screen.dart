@@ -312,7 +312,9 @@ class _DifficultyRow extends StatelessWidget {
                       audio.invalid();
                       ScaffoldMessenger.of(context).showSnackBar(
                         SnackBar(
-                          content: Text('Master is a PRO feature',
+                          content: Text(defaultTargetPlatform == TargetPlatform.iOS
+                              ? 'Master bot is free for everyone.'
+                              : 'Master is a PRO feature',
                               style: Scholar.body(14, theme: theme)),
                           backgroundColor: theme.woodDeep,
                           behavior: SnackBarBehavior.floating,

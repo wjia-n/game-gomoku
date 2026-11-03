@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import '../engine/gomoku_engine.dart';
@@ -226,7 +227,7 @@ class _GameScreenState extends State<GameScreen>
             if (!s.isPro)
               IconButton(
                 icon: Icon(Icons.workspace_premium, color: t.accent),
-                tooltip: 'Gomoku PRO',
+                tooltip: defaultTargetPlatform == TargetPlatform.iOS ? 'Gold Star' : 'Gomoku PRO',
                 onPressed: _openPro,
               ),
             IconButton(
